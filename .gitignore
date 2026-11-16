@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# 运行时产物
+my_memories/*.md
+debug_artifacts/
+launcher.log
+
+# 本项目的临时启动包装（各人自己写自己的）
+启动记忆库.vbs
+*.lnk
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
