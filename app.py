@@ -1544,10 +1544,13 @@ GEEK_CSS_VARS: dict[str, dict] = {
         "geek-bg": "#06090e",
         "geek-panel": "#0b1119",
         "geek-panel-soft": "rgba(11,17,25,.72)",
+        "geek-glass": "rgba(11,17,25,.55)",
+        "geek-glass-border": "rgba(34,211,238,.18)",
         "geek-line": "#16232f",
         "geek-line-soft": "rgba(34,211,238,.28)",
         "geek-cyan": "#22d3ee",
         "geek-cyan-soft": "rgba(34,211,238,.35)",
+        "geek-cyan-glow": "rgba(34,211,238,.55)",
         "geek-green": "#7cf59d",
         "geek-pink": "#ff3d81",
         "geek-text": "#e3edf6",
@@ -1558,15 +1561,23 @@ GEEK_CSS_VARS: dict[str, dict] = {
         "geek-sidebar-grad": "linear-gradient(180deg,#0a1018 0%,#06090e 100%)",
         "geek-app-radial-a": "rgba(34,211,238,.10)",
         "geek-app-radial-b": "rgba(255,61,129,.07)",
+        "geek-card-shadow": "0 2px 8px rgba(0,0,0,.35), 0 0 0 1px rgba(34,211,238,.06)",
+        "geek-card-shadow-hover": "0 4px 20px rgba(34,211,238,.12), 0 0 0 1px rgba(34,211,238,.25)",
+        "geek-scrollbar": "#1a2836",
+        "geek-scrollbar-thumb": "#2a4055",
+        "geek-transition": "220ms cubic-bezier(.4,0,.2,1)",
     },
     "light": {
         "geek-bg": "#f7f9fc",
         "geek-panel": "#ffffff",
         "geek-panel-soft": "rgba(255,255,255,.85)",
+        "geek-glass": "rgba(255,255,255,.72)",
+        "geek-glass-border": "rgba(14,165,183,.15)",
         "geek-line": "#e2e8f0",
         "geek-line-soft": "rgba(14,165,183,.28)",
         "geek-cyan": "#0ea5b7",
         "geek-cyan-soft": "rgba(14,165,183,.32)",
+        "geek-cyan-glow": "rgba(14,165,183,.42)",
         "geek-green": "#10b981",
         "geek-pink": "#e11d7d",
         "geek-text": "#1e2936",
@@ -1577,6 +1588,11 @@ GEEK_CSS_VARS: dict[str, dict] = {
         "geek-sidebar-grad": "linear-gradient(180deg,#f1f5f9 0%,#f7f9fc 100%)",
         "geek-app-radial-a": "rgba(14,165,183,.05)",
         "geek-app-radial-b": "rgba(225,29,125,.04)",
+        "geek-card-shadow": "0 1px 3px rgba(15,23,42,.08), 0 0 0 1px rgba(14,165,183,.04)",
+        "geek-card-shadow-hover": "0 4px 16px rgba(14,165,183,.10), 0 0 0 1px rgba(14,165,183,.22)",
+        "geek-scrollbar": "#e2e8f0",
+        "geek-scrollbar-thumb": "#cbd5e1",
+        "geek-transition": "220ms cubic-bezier(.4,0,.2,1)",
     },
 }
 
@@ -1641,6 +1657,7 @@ def _theme_css_vars(theme_key: str) -> str:
 
 CYBER_CSS = """
 <style>
+/* ========= 全局 ========= */
 .stApp {
   background:
     radial-gradient(1200px 600px at 85% -10%, var(--geek-app-radial-a), transparent 60%),
@@ -1648,150 +1665,221 @@ CYBER_CSS = """
     var(--geek-bg);
   color: var(--geek-text);
 }
+* { transition: color var(--geek-transition), background-color var(--geek-transition), border-color var(--geek-transition), box-shadow var(--geek-transition), opacity var(--geek-transition); }
+
+/* ========= 滚动条 ========= */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--geek-scrollbar-thumb);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--geek-cyan-glow); background-clip: padding-box; border: 2px solid transparent; }
+
+/* ========= 侧边栏 ========= */
 [data-testid="stSidebar"] {
   background: var(--geek-sidebar-grad);
   border-right: 1px solid var(--geek-line);
 }
-[data-testid="stMarkdownContainer"] p,
-[data-testid="stMarkdownContainer"] li,
-[data-testid="stMarkdownContainer"] td,
-[data-testid="stMarkdownContainer"] strong,
-[data-testid="stMarkdownContainer"] span,
-[data-testid="stMarkdownContainer"] div {
-  color: var(--geek-text);
+[data-testid="stSidebar"] section[data-testid="stSidebarNavContainer"] {
+  background: transparent !important;
 }
-[data-testid="stMarkdownContainer"] small,
-[data-testid="stMarkdownContainer"] em,
-label, .stMetricLabel, .stCaption, .stMarkdown p small {
-  color: var(--geek-dim) !important;
-}
-[data-testid="stHeader"] { background: transparent; }
-h1, h2, h3, h4 {
+
+/* ========= 标题 / Header ========= */
+.geek-title {
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  letter-spacing: .3px; color: var(--geek-text-strong);
+  font-size: 2.2rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  color: var(--geek-text-strong);
+  text-shadow: 0 0 22px var(--geek-title-shadow), 0 0 2px var(--geek-cyan-glow);
+  margin-bottom: .2rem;
+  position: relative;
+  display: inline-block;
 }
+.geek-title::before, .geek-title::after {
+  content: attr(data-text);
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+  pointer-events: none;
+}
+.geek-title::before { color: var(--geek-pink); transform: translate(-2px, 0); opacity: .45; mix-blend-mode: screen; animation: glitch-top 3s infinite steps(2, end); }
+.geek-title::after  { color: var(--geek-cyan); transform: translate(2px, 0); opacity: .45; mix-blend-mode: screen; animation: glitch-bot 2.6s infinite steps(2, end); }
+.geek-title span { color: var(--geek-cyan); }
+@keyframes glitch-top { 0%,90%,100%{clip-path:inset(0 0 85% 0)} 92%{clip-path:inset(20% 0 55% 0)} 94%{clip-path:inset(60% 0 10% 0)} }
+@keyframes glitch-bot { 0%,88%,100%{clip-path:inset(82% 0 0 0)} 90%{clip-path:inset(40% 0 30% 0)} 93%{clip-path:inset(5% 0 70% 0)} }
+.geek-sub {
+  color: var(--geek-dim);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: .78rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.geek-hr {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--geek-cyan) 20%, var(--geek-cyan) 80%, transparent);
+  margin: 1rem 0 1.4rem 0;
+  position: relative;
+}
+.geek-hr::after {
+  content: ""; position: absolute; left: 0; top: 0; width: 30%; height: 100%;
+  background: linear-gradient(90deg, transparent, var(--geek-cyan-glow), transparent);
+  animation: hr-sweep 3.2s infinite;
+}
+@keyframes hr-sweep { 0%{transform:translateX(-100%)} 100%{transform:translateX(450%)} }
+
+/* ========= 排版 ========= */
+h1, h2, h3, h4 { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; letter-spacing: .3px; color: var(--geek-text-strong); }
 p, li, div { font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; }
 code, pre, kbd { font-family: ui-monospace, "Cascadia Code", Consolas, monospace !important; }
-.geek-title {
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 1.9rem; font-weight: 700; letter-spacing: 2px;
-  color: var(--geek-text-strong);
-  text-shadow: 0 0 18px var(--geek-title-shadow);
-  margin-bottom: .15rem;
+[data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] li,
+[data-testid="stMarkdownContainer"] td, [data-testid="stMarkdownContainer"] strong,
+[data-testid="stMarkdownContainer"] span, [data-testid="stMarkdownContainer"] div { color: var(--geek-text); }
+[data-testid="stMarkdownContainer"] small, [data-testid="stMarkdownContainer"] em,
+label, .stMetricLabel, .stCaption, .stMarkdown p small { color: var(--geek-dim) !important; }
+[data-testid="stHeader"] { background: transparent; }
+a { color: var(--geek-cyan) !important; text-decoration: none; position: relative; }
+a:hover { color: var(--geek-text-strong) !important; }
+a::after { content:""; position:absolute; left:0; bottom:-2px; width:0; height:1px; background:var(--geek-cyan); transition: width var(--geek-transition); }
+a:hover::after { width:100%; }
+
+/* ========= 卡片（记忆条目） ========= */
+.geek-card {
+  border: 1px solid var(--geek-glass-border);
+  border-radius: 14px;
+  padding: 1.1rem 1.3rem .9rem 1.3rem;
+  margin-bottom: 1rem;
+  background: var(--geek-glass);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--geek-card-shadow);
+  transition: transform var(--geek-transition), box-shadow var(--geek-transition), border-color var(--geek-transition);
+  position: relative;
+  overflow: hidden;
 }
-.geek-title span { color: var(--geek-cyan); }
-.geek-sub { color: var(--geek-dim); font-family: ui-monospace, Consolas, monospace; font-size: .8rem; letter-spacing: 1px; }
-.geek-hr { height: 1px; background: linear-gradient(90deg, var(--geek-cyan), transparent); margin: .7rem 0 1.1rem 0; }
-[data-testid="stMetricValue"] { color: var(--geek-cyan); font-family: ui-monospace, Consolas, monospace; }
-[data-testid="stMetricLabel"] { color: var(--geek-dim); }
-div[data-testid="stExpander"] {
-  border: 1px solid var(--geek-line);
-  border-radius: 10px;
-  background: var(--geek-panel-soft);
+.geek-card::before {
+  content: ""; position: absolute; top: 0; left: 0; width: 3px; height: 100%;
+  background: linear-gradient(180deg, var(--geek-cyan), transparent 70%);
+  opacity: .8;
 }
+.geek-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--geek-card-shadow-hover);
+  border-color: var(--geek-cyan-glow);
+}
+
+/* ========= Metric 三栏 ========= */
+[data-testid="stMetric"] {
+  background: var(--geek-glass);
+  border: 1px solid var(--geek-glass-border);
+  border-radius: 12px;
+  padding: .9rem 1.1rem;
+  box-shadow: var(--geek-card-shadow);
+  transition: transform var(--geek-transition), box-shadow var(--geek-transition);
+}
+[data-testid="stMetric"]:hover { transform: translateY(-1px); box-shadow: var(--geek-card-shadow-hover); }
+[data-testid="stMetricValue"] { color: var(--geek-cyan) !important; font-family: ui-monospace, Consolas, monospace; font-weight: 700; }
+[data-testid="stMetricLabel"] { color: var(--geek-dim) !important; font-size: .75rem; letter-spacing: 1px; text-transform: uppercase; }
+
+/* ========= 按钮 ========= */
 .stButton > button, .stDownloadButton > button {
   font-family: ui-monospace, Consolas, monospace;
-  border-radius: 8px;
-  border: 1px solid var(--geek-cyan-soft);
+  border-radius: 10px !important;
+  border: 1px solid var(--geek-cyan-soft) !important;
+  background: var(--geek-panel-soft) !important;
+  color: var(--geek-text) !important;
+  position: relative;
+  overflow: hidden;
+  transition: all var(--geek-transition);
 }
+.stButton > button:hover, .stDownloadButton > button:hover {
+  border-color: var(--geek-cyan) !important;
+  color: var(--geek-text-strong) !important;
+  box-shadow: 0 0 12px var(--geek-cyan-glow), inset 0 0 12px rgba(34,211,238,.08) !important;
+  transform: translateY(-1px);
+}
+.stButton > button:active, .stDownloadButton > button:active { transform: translateY(0); }
+button[kind="primary"] {
+  border-radius: 10px !important;
+  box-shadow: 0 0 0 rgba(0,0,0,0);
+  transition: all var(--geek-transition);
+}
+button[kind="primary"]:hover {
+  box-shadow: 0 0 18px var(--geek-cyan-glow), 0 0 40px var(--geek-cyan-soft);
+  transform: translateY(-1px);
+}
+
+/* 删除按钮：pink 高亮 */
+button[key*="del_"] { border-color: rgba(255,61,129,.35) !important; color: var(--geek-pink) !important; }
+button[key*="del_"]:hover {
+  border-color: var(--geek-pink) !important;
+  box-shadow: 0 0 12px rgba(255,61,129,.35) !important;
+}
+
+/* ========= 输入框 ========= */
 .stTextInput input, .stTextArea textarea, .stSelectbox [role="combobox"] {
   background: var(--geek-input-bg) !important;
   color: var(--geek-text) !important;
   border: 1px solid var(--geek-line) !important;
+  border-radius: 10px !important;
   font-family: ui-monospace, Consolas, monospace !important;
+  transition: all var(--geek-transition);
 }
-.stTextInput input::placeholder, .stTextArea textarea::placeholder {
-  color: var(--geek-dim) !important;
+.stTextInput input:focus, .stTextArea textarea:focus {
+  border-color: var(--geek-cyan) !important;
+  box-shadow: 0 0 0 2px var(--geek-cyan-soft), 0 0 12px var(--geek-cyan-glow) !important;
 }
-/* Streamlit 原生组件：背景色统一覆盖成 CSS 变量，
- * 确保运行时切换主题即时生效（config.toml 重启才生效） */
-[data-testid="stMetric"],
-[data-testid="stMetric"] > div,
-.stMetric,
-.stMetric > div {
-  background: transparent !important;
-  color: var(--geek-text) !important;
+.stTextInput input::placeholder, .stTextArea textarea::placeholder { color: var(--geek-dim) !important; }
+[data-testid="stTextInput"] label, [data-testid="stTextArea"] label { color: var(--geek-dim) !important; letter-spacing: .5px; font-size: .82rem; }
+
+/* ========= Expander ========= */
+div[data-testid="stExpander"] {
+  border: 1px solid var(--geek-glass-border) !important;
+  border-radius: 10px !important;
+  background: var(--geek-glass) !important;
+  backdrop-filter: blur(6px);
 }
-[data-testid="stSelectbox"] [role="combobox"],
-[data-testid="stMultiSelect"] [role="combobox"],
-[data-testid="stSelectbox"] [role="listbox"],
-[data-testid="stMultiSelect"] [role="listbox"] {
-  background: var(--geek-input-bg) !important;
-  color: var(--geek-text) !important;
-  border: 1px solid var(--geek-line) !important;
-}
-button[kind="secondary"],
-.stButton > button, .stDownloadButton > button {
-  background: var(--geek-panel-soft) !important;
-  color: var(--geek-text) !important;
-  border: 1px solid var(--geek-cyan-soft) !important;
-  border-radius: 8px;
-}
-button[kind="primary"] {
-  border-radius: 8px;
-}
-/* Expander 展开后内部容器 */
-div[data-testid="stExpander"] > div:not([data-testid="stStickyFooter"]) > div {
-  background: transparent !important;
-  color: var(--geek-text) !important;
-}
-/* Checkbox / Radio / Toggle */
-.stCheckbox label, .stRadio label, .stMarkdown label { color: var(--geek-text) !important; }
-[data-testid="stCheckbox"] label, [data-testid="stRadio"] label, [data-testid="stSidebar"] label {
-  color: var(--geek-text) !important;
-}
-.stCode pre, pre {
-  background: var(--geek-input-bg) !important;
-}
-/* Sidebar 顶部标题区 */
-[data-testid="stSidebarNavItems"],
-[data-testid="stSidebarNavContainer"],
-section[data-testid="stSidebar"] > div:first-child {
-  background: transparent !important;
-}
-/* st.tabs 标签容器 */
-[data-testid="stTabs"],
-button[data-baseweb="tab"], button[data-baseweb="tab-list"],
-button[aria-selected="false"] {
-  color: var(--geek-text) !important;
-}
-button[aria-selected="true"] { color: var(--geek-cyan) !important; }
-/* st.code 容器 */
-div[data-testid="stCode"] { border: 1px solid var(--geek-line) !important; border-radius: 8px; }
-/* 数据表格 st.dataframe */
-.stDataFrame, .stTable, div[data-testid="stTable"] {
-  background: var(--geek-panel-soft) !important;
-  color: var(--geek-text) !important;
-  border: 1px solid var(--geek-line) !important;
-}
-/* 所有 caption / helper 文本 */
-.stCaption, .stHelper, small, em {
-  color: var(--geek-dim) !important;
-}
-a { color: var(--geek-cyan) !important; }
+div[data-testid="stExpander"] summary:hover { color: var(--geek-cyan) !important; }
+div[data-testid="stExpander"] > div:not([data-testid="stStickyFooter"]) > div { background: transparent !important; color: var(--geek-text) !important; }
+
+/* ========= Badge ========= */
 .geek-badge {
-  display: inline-block; padding: .12rem .5rem; margin-right: .4rem;
-  border: 1px solid var(--geek-cyan-soft); border-radius: 999px;
-  color: var(--geek-cyan); font-size: .72rem; font-family: ui-monospace, Consolas, monospace;
+  display: inline-block; padding: .14rem .55rem; margin-right: .4rem; margin-bottom: .15rem;
+  border: 1px solid var(--geek-cyan-soft);
+  border-radius: 999px;
+  color: var(--geek-cyan);
+  font-size: .72rem;
+  font-family: ui-monospace, Consolas, monospace;
+  letter-spacing: .5px;
+  background: var(--geek-panel-soft);
 }
 .geek-badge.pink { border-color: rgba(225,29,125,.4); color: var(--geek-pink); }
 .geek-badge.green { border-color: rgba(16,185,129,.35); color: var(--geek-green); }
-.geek-meta-block {
-  border-left: 2px solid var(--geek-cyan);
-  padding: .4rem .7rem; margin: .6rem 0;
-  background: var(--geek-panel-soft);
-  border-radius: 0 6px 6px 0;
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: .78rem; color: var(--geek-dim);
+
+/* ========= Checkbox / Radio / Toggle ========= */
+.stCheckbox label, .stRadio label, .stMarkdown label { color: var(--geek-text) !important; }
+[data-testid="stCheckbox"] label, [data-testid="stRadio"] label, [data-testid="stSidebar"] label { color: var(--geek-text) !important; }
+
+/* ========= Code ========= */
+.stCode pre, pre { background: var(--geek-input-bg) !important; border-radius: 8px; }
+div[data-testid="stCode"] { border: 1px solid var(--geek-line) !important; border-radius: 8px; }
+
+/* ========= Selectbox ========= */
+[data-testid="stSelectbox"] [role="combobox"], [data-testid="stMultiSelect"] [role="combobox"],
+[data-testid="stSelectbox"] [role="listbox"], [data-testid="stMultiSelect"] [role="listbox"] {
+  background: var(--geek-input-bg) !important;
+  color: var(--geek-text) !important;
+  border: 1px solid var(--geek-line) !important;
 }
-.geek-meta-block strong { color: var(--geek-text-strong); font-family: inherit; }
-.geek-card {
-  border: 1px solid var(--geek-line);
-  border-radius: 12px;
-  padding: 1rem 1.2rem .8rem 1.2rem;
-  margin-bottom: 1rem;
-  background: var(--geek-panel-soft);
-}
+
+/* ========= Tabs ========= */
+[data-testid="stTabs"], button[data-baseweb="tab"], button[data-baseweb="tab-list"], button[aria-selected="false"] { color: var(--geek-text) !important; }
+button[aria-selected="true"] { color: var(--geek-cyan) !important; border-bottom: 2px solid var(--geek-cyan) !important; }
+
+/* ========= Caption / Helper ========= */
+.stCaption, .stHelper, small, em { color: var(--geek-dim) !important; }
+
+/* ========= 卡片容器 / geek-card 旧类兼容 ========= */
 .geek-card h4 { margin: 0 0 .3rem 0; color: var(--geek-text-strong); }
 .geek-meta { color: var(--geek-dim); font-size: .78rem; font-family: ui-monospace, Consolas, monospace; }
 </style>
@@ -1800,7 +1888,7 @@ a { color: var(--geek-cyan) !important; }
 
 def _render_header() -> None:
     st.markdown(
-        '<div class="geek-title">Deep<span>Share</span></div>'
+        '<div class="geek-title" data-text="DeepShare">Deep<span>Share</span></div>'
         '<div class="geek-sub">DeepSeek Share → Local Memory Vault</div>'
         '<div class="geek-hr"></div>',
         unsafe_allow_html=True,
@@ -1977,41 +2065,42 @@ def render_main(result: ScrapeResult | None) -> None:
         shown = len(filtered)  # 搜索时全部展开，方便定位
 
     for item in filtered[:shown]:
-        with st.container(border=True):
-            head_l, head_r = st.columns([5, 2])
-            with head_l:
-                st.markdown(f"#### {item['title']}")
-            with head_r:
-                st.caption(f"{item['mtime']}")
-            badges = (
-                f'<span class="geek-badge green">{item["chars"]:,} 字符</span>'
-                f'<span class="geek-badge">{item["strategy"] or "未知策略"}</span>'
+        st.markdown('<div class="geek-card">', unsafe_allow_html=True)
+        head_l, head_r = st.columns([5, 2])
+        with head_l:
+            st.markdown(f"#### {item['title']}")
+        with head_r:
+            st.caption(f"{item['mtime']}")
+        badges = (
+            f'<span class="geek-badge green">{item["chars"]:,} 字符</span>'
+            f'<span class="geek-badge">{item["strategy"] or "未知策略"}</span>'
+        )
+        st.markdown(badges, unsafe_allow_html=True)
+        if item["source"]:
+            st.caption(f"来源：{item['source']}")
+            st.markdown(f"[打开原始分享链接]({item['source']})")
+        preview = item["body"][:420]
+        if len(item["body"]) > 420:
+            preview += "\n\n…"
+        st.markdown(preview)
+        with st.expander("展开全文", expanded=False):
+            st.markdown(item["body"])
+        with st.expander("查看元数据 / 文件名", expanded=False):
+            st.json(
+                {
+                    "文件": item["name"],
+                    "标题": item["title"],
+                    "来源": item["source"],
+                    "抓取时间": item["scraped_at"],
+                    "抓取策略": item["strategy"],
+                    "字符数": item["chars"],
+                    "字节数": item["size"],
+                }
             )
-            st.markdown(badges, unsafe_allow_html=True)
-            if item["source"]:
-                st.caption(f"来源：{item['source']}")
-                st.markdown(f"[打开原始分享链接]({item['source']})")
-            preview = item["body"][:420]
-            if len(item["body"]) > 420:
-                preview += "\n\n…"
-            st.markdown(preview)
-            with st.expander("展开全文", expanded=False):
-                st.markdown(item["body"])
-            with st.expander("查看元数据 / 文件名", expanded=False):
-                st.json(
-                    {
-                        "文件": item["name"],
-                        "标题": item["title"],
-                        "来源": item["source"],
-                        "抓取时间": item["scraped_at"],
-                        "抓取策略": item["strategy"],
-                        "字符数": item["chars"],
-                        "字节数": item["size"],
-                    }
-                )
-            if st.button("🗑 删除这条记忆", key=f"del_{item['path']}", use_container_width=True):
-                st.session_state["_pending_delete"] = item["path"]
-                st.rerun()
+        if st.button("🗑 删除这条记忆", key=f"del_{item['path']}", use_container_width=True):
+            st.session_state["_pending_delete"] = item["path"]
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
     if not query and shown < len(filtered):
         if st.button(f"加载更多（还有 {len(filtered) - shown} 条）", width="stretch"):
