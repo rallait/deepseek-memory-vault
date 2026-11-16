@@ -1537,6 +1537,13 @@ STREAMLIT_THEMES: dict[str, dict] = {
         "secondaryBackgroundColor": "#ffffff",
         "textColor": "#1e2936",
     },
+    "amber": {
+        "base": "dark",
+        "primaryColor": "#f5b942",
+        "backgroundColor": "#1a120a",
+        "secondaryBackgroundColor": "#241810",
+        "textColor": "#f4e9d4",
+    },
 }
 
 GEEK_CSS_VARS: dict[str, dict] = {
@@ -1594,6 +1601,33 @@ GEEK_CSS_VARS: dict[str, dict] = {
         "geek-scrollbar-thumb": "#cbd5e1",
         "geek-transition": "220ms cubic-bezier(.4,0,.2,1)",
     },
+    "amber": {
+        "geek-bg": "#1a120a",
+        "geek-panel": "#241810",
+        "geek-panel-soft": "rgba(36,24,16,.78)",
+        "geek-glass": "rgba(36,24,16,.60)",
+        "geek-glass-border": "rgba(245,185,66,.20)",
+        "geek-line": "#3a2818",
+        "geek-line-soft": "rgba(245,185,66,.30)",
+        "geek-cyan": "#f5b942",
+        "geek-cyan-soft": "rgba(245,185,66,.32)",
+        "geek-cyan-glow": "rgba(245,185,66,.55)",
+        "geek-green": "#6fc47a",
+        "geek-pink": "#d95c4f",
+        "geek-text": "#f4e9d4",
+        "geek-text-strong": "#fff6e2",
+        "geek-dim": "#a8947a",
+        "geek-input-bg": "#140c06",
+        "geek-title-shadow": "rgba(245,185,66,.50)",
+        "geek-sidebar-grad": "linear-gradient(180deg,#1e1509 0%,#1a120a 100%)",
+        "geek-app-radial-a": "rgba(245,185,66,.10)",
+        "geek-app-radial-b": "rgba(217,92,79,.06)",
+        "geek-card-shadow": "0 2px 8px rgba(0,0,0,.45), 0 0 0 1px rgba(245,185,66,.08)",
+        "geek-card-shadow-hover": "0 4px 20px rgba(245,185,66,.14), 0 0 0 1px rgba(245,185,66,.30)",
+        "geek-scrollbar": "#3a2818",
+        "geek-scrollbar-thumb": "#5a3e22",
+        "geek-transition": "220ms cubic-bezier(.4,0,.2,1)",
+    },
 }
 
 
@@ -1602,8 +1636,8 @@ def _streamlit_config_path() -> Path:
 
 
 def _read_config_toml() -> dict:
-    """极简 TOML 读取，只关心 [theme] + [client] 两段。"""
-    cfg = {"theme": {}, "client": {}}
+    """极简 TOML 读取，只关心 [theme] + [client] + [deepshare] 三段。"""
+    cfg = {"theme": {}, "client": {}, "deepshare": {}}
     path = _streamlit_config_path()
     if not path.exists():
         return cfg
@@ -1628,8 +1662,8 @@ def _write_config_toml(cfg: dict) -> None:
     path = _streamlit_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
-    for section in ("theme", "client"):
-        if section not in cfg:
+    for section in ("theme", "client", "deepshare"):
+        if section not in cfg or not cfg[section]:
             continue
         lines.append(f"[{section}]")
         for k, v in cfg[section].items():
@@ -1644,6 +1678,7 @@ def _sync_theme_config(theme_key: str) -> None:
         return
     cfg = _read_config_toml()
     cfg.setdefault("client", {})["toolbarMode"] = "minimal"
+    cfg.setdefault("deepshare", {})["theme_key"] = theme_key
     cfg["theme"].update(STREAMLIT_THEMES[theme_key])
     _write_config_toml(cfg)
 
@@ -1959,15 +1994,21 @@ def _result_card(res: ScrapeResult) -> None:
 
 def render_sidebar() -> ScrapeResult | None:
     with st.sidebar:
-        # 主题切换（放在最顶部，即时生效 + 写入 config.toml）
+        # 主题切换（三选一，即时生效 + 写入 config.toml）
         cur_theme = st.session_state.get("theme_key", "dark")
-        theme_toggle = st.toggle(
-            "🌙 暗色主题",
-            value=(cur_theme == "dark"),
-            key="theme_toggle_raw",
-            help="关闭切换为浅色清爽风，切换后自动保存下次启动生效",
+        THEMES_LABEL = {
+            "dark":  "🌙 赛博 Dark",
+            "light": "☀️ 清爽 Light",
+            "amber": "🟠 琥珀 Amber",
+        }
+        theme_label = st.selectbox(
+            "🎨 主题风格",
+            options=list(THEMES_LABEL.values()),
+            index=list(THEMES_LABEL.keys()).index(cur_theme),
+            key="theme_selector",
+            help="选择后即时生效并自动保存",
         )
-        new_theme = "dark" if theme_toggle else "light"
+        new_theme = list(THEMES_LABEL.keys())[list(THEMES_LABEL.values()).index(theme_label)]
         if new_theme != cur_theme:
             st.session_state["theme_key"] = new_theme
             _sync_theme_config(new_theme)
@@ -2151,11 +2192,15 @@ def main() -> None:
         initial_sidebar_state="expanded",
     )
 
-    # 主题初始化：首次启动从 config.toml 推断，之后以 session_state 为准
+    # 主题初始化：优先从 config.toml [deepshare] theme_key 读，fallback 到 base 推断
     if "theme_key" not in st.session_state:
         cfg = _read_config_toml()
+        saved = cfg.get("deepshare", {}).get("theme_key", "")
         base = (cfg.get("theme", {}).get("base") or "dark").lower()
-        st.session_state["theme_key"] = "light" if base.startswith("light") else "dark"
+        if saved in STREAMLIT_THEMES:
+            st.session_state["theme_key"] = saved
+        else:
+            st.session_state["theme_key"] = "light" if base.startswith("light") else "dark"
         _sync_theme_config(st.session_state["theme_key"])
 
     st.markdown(_theme_css_vars(st.session_state["theme_key"]), unsafe_allow_html=True)
