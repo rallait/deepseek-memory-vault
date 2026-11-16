@@ -16,11 +16,14 @@
 
 from __future__ import annotations
 
+import html
 import io
 import json
 import re
 import sys
 import time
+import urllib.error
+import urllib.request
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -36,6 +39,17 @@ import streamlit as st
 BASE_DIR = Path(__file__).resolve().parent
 MEMORY_DIR = BASE_DIR / "my_memories"
 DEBUG_DIR = BASE_DIR / "debug_artifacts"
+
+# AI 总结配置（本地文件，已在 .gitignore 中排除，不会上传）
+AI_CONFIG_PATH = BASE_DIR / ".deepshare_ai.json"
+AI_DEFAULTS = {
+    "api_key": "",
+    "base_url": "https://api.deepseek.com",
+    "model": "deepseek-chat",
+}
+# 单次送入模型的最大字符数（头 + 尾拼接，避免超长对话爆上下文）
+AI_INPUT_HEAD = 14000
+AI_INPUT_TAIL = 6000
 
 LogFn = Callable[[str], None]
 
@@ -1500,6 +1514,7 @@ def load_memories(dir_mtime: float) -> list[dict]:
                 "source": meta.get("source", ""),
                 "scraped_at": meta.get("scraped_at", ""),
                 "strategy": meta.get("strategy", ""),
+                "summary": meta.get("summary", ""),
                 "body": body.strip(),
                 "raw": raw,
                 "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
@@ -1514,6 +1529,118 @@ def _dir_signature() -> float:
     _ensure_dirs()
     files = list(MEMORY_DIR.glob("*.md"))
     return max([p.stat().st_mtime for p in files], default=0.0) + len(files)
+
+
+# ----------------------------------------------------------------------------
+# AI 总结（OpenAI 兼容接口，默认 DeepSeek）
+# ----------------------------------------------------------------------------
+def _read_ai_config() -> dict:
+    cfg = dict(AI_DEFAULTS)
+    try:
+        if AI_CONFIG_PATH.exists():
+            data = json.loads(AI_CONFIG_PATH.read_text(encoding="utf-8"))
+            for k in cfg:
+                if isinstance(data.get(k), str) and data[k].strip():
+                    cfg[k] = data[k].strip()
+    except Exception:
+        pass
+    return cfg
+
+
+def _write_ai_config(cfg: dict) -> None:
+    payload = {k: str(cfg.get(k, AI_DEFAULTS[k])).strip() for k in AI_DEFAULTS}
+    AI_CONFIG_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _ai_is_ready(cfg: dict) -> bool:
+    return bool(cfg.get("api_key") and cfg.get("base_url") and cfg.get("model"))
+
+
+def _clip_for_ai(body: str) -> str:
+    """超长对话只取头尾，控制 token 成本。"""
+    if len(body) <= AI_INPUT_HEAD + AI_INPUT_TAIL:
+        return body
+    return (
+        body[:AI_INPUT_HEAD]
+        + "\n\n……（中间省略 " + f"{len(body) - AI_INPUT_HEAD - AI_INPUT_TAIL:,}" + " 字）……\n\n"
+        + body[-AI_INPUT_TAIL:]
+    )
+
+
+def _ai_chat(cfg: dict, messages: list[dict], timeout: int = 120) -> str:
+    """调用 OpenAI 兼容的 /chat/completions，失败抛 RuntimeError。"""
+    url = cfg["base_url"].rstrip("/")
+    if not url.endswith("/chat/completions"):
+        url += "/chat/completions"
+    payload = json.dumps(
+        {
+            "model": cfg["model"],
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": 800,
+            "stream": False,
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {cfg['api_key']}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", "ignore")[:300]
+        except Exception:
+            pass
+        raise RuntimeError(f"接口返回 {exc.code}：{detail or exc.reason}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"网络无法连接：{exc.reason}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"请求失败：{type(exc).__name__}: {exc}") from exc
+
+    try:
+        return (data["choices"][0]["message"]["content"] or "").strip()
+    except (KeyError, IndexError, TypeError):
+        raise RuntimeError(f"接口返回格式异常：{json.dumps(data, ensure_ascii=False)[:300]}")
+
+
+def summarize_memory(item: dict, cfg: dict) -> str:
+    title = item.get("title", "")
+    body = _clip_for_ai(item.get("body", ""))
+    instruction = (
+        "你是一个对话归档助手。请用中文为下面这段对话写一段总结，要求：\n"
+        "1. 3-5 句话，总长度 120-220 字，纯文本，不要 Markdown 标题和列表符号；\n"
+        "2. 先一句话概括对话主题，再列出关键结论/方案，最后一句说明可复用的要点或结论；\n"
+        "3. 只依据对话内容，不要编造；如果对话以代码为主，点明技术栈与核心做法。"
+    )
+    messages = [
+        {"role": "system", "content": instruction},
+        {"role": "user", "content": f"对话标题：{title}\n\n对话正文：\n{body}"},
+    ]
+    summary = _ai_chat(cfg, messages)
+    summary = re.sub(r"\s+", " ", summary).strip()
+    if not summary:
+        raise RuntimeError("接口返回了空内容")
+    return summary[:400]
+
+
+def _set_summary(path: Path, summary: str) -> None:
+    """把总结写回 Markdown 的 front matter（单行保存，保证可解析）。"""
+    raw = Path(path).read_text(encoding="utf-8")
+    meta, body = split_front_matter(raw)
+    meta["summary"] = re.sub(r"\s+", " ", summary).strip()
+    order = ["title", "source", "scraped_at", "strategy", "summary"]
+    keys = [k for k in order if k in meta] + [k for k in meta if k not in order]
+    front = "---\n" + "".join(f'{k}: "{meta[k]}"\n' for k in keys) + "---\n\n"
+    Path(path).write_text(front + body, encoding="utf-8")
 
 
 # ----------------------------------------------------------------------------
@@ -1982,6 +2109,17 @@ div[role="alert"], div[role="status"] {
 
 /* ========= 卡片容器 / geek-card 旧类兼容 ========= */
 .geek-card h4 { margin: 0 0 .3rem 0; color: var(--geek-text-strong) !important; }
+.geek-summary {
+  margin: .1rem 0 .7rem 0;
+  padding: .6rem .85rem;
+  border-left: 3px solid var(--geek-cyan);
+  border-radius: 6px;
+  background: var(--geek-glass);
+  color: var(--geek-text) !important;
+  font-size: .92rem;
+  line-height: 1.65;
+}
+.geek-summary b { color: var(--geek-cyan) !important; }
 .geek-meta { color: var(--geek-dim) !important; font-size: .78rem; font-family: ui-monospace, Consolas, monospace; }
 </style>
 """
@@ -2110,6 +2248,37 @@ def render_sidebar() -> ScrapeResult | None:
             st.caption("暂无记忆可导出")
 
         st.markdown("---")
+        st.markdown("##### ✨ AI 总结")
+        ai_cfg = _read_ai_config()
+        with st.expander("接口配置", expanded=not _ai_is_ready(ai_cfg)):
+            key_in = st.text_input(
+                "API Key",
+                value=ai_cfg["api_key"],
+                type="password",
+                key="ai_key_input",
+                help="仅保存在本机 .deepshare_ai.json，不会上传 GitHub",
+            )
+            base_in = st.text_input(
+                "Base URL", value=ai_cfg["base_url"], key="ai_base_input",
+                help="默认 https://api.deepseek.com，任何 OpenAI 兼容端点均可",
+            )
+            model_in = st.text_input(
+                "模型", value=ai_cfg["model"], key="ai_model_input",
+                help="默认 deepseek-chat",
+            )
+            if st.button("保存配置", width="stretch", key="ai_save_btn"):
+                if not key_in.strip():
+                    st.warning("请先填写 API Key")
+                else:
+                    _write_ai_config({"api_key": key_in, "base_url": base_in, "model": model_in})
+                    st.toast("AI 配置已保存", icon="✅")
+                    st.rerun()
+        if _ai_is_ready(ai_cfg):
+            st.caption("✅ 已配置，可在记忆卡片上点击「AI 总结」")
+        else:
+            st.caption("未配置 API Key，AI 总结不可用")
+
+        st.markdown("---")
         st.markdown("##### 存储位置")
         st.caption(str(MEMORY_DIR))
         st.markdown("##### 环境自检")
@@ -2183,6 +2352,11 @@ def render_main(result: ScrapeResult | None) -> None:
             f'<span class="geek-badge">{item["strategy"] or "未知策略"}</span>'
         )
         st.markdown(badges, unsafe_allow_html=True)
+        if item.get("summary"):
+            st.markdown(
+                f'<div class="geek-summary">✨ <b>AI 总结</b><br>{html.escape(item["summary"])}</div>',
+                unsafe_allow_html=True,
+            )
         if item["source"]:
             st.caption(f"来源：{item['source']}")
             st.markdown(f"[打开原始分享链接]({item['source']})")
@@ -2204,9 +2378,32 @@ def render_main(result: ScrapeResult | None) -> None:
                     "字节数": item["size"],
                 }
             )
-        if st.button("🗑 删除这条记忆", key=f"del_{item['path']}", use_container_width=True):
-            st.session_state["_pending_delete"] = item["path"]
-            st.rerun()
+        act_l, act_r = st.columns([1, 1])
+        with act_l:
+            has_summary = bool(item.get("summary"))
+            if st.button(
+                "🔄 重新总结" if has_summary else "✨ AI 总结",
+                key=f"sum_{item['path']}",
+                width="stretch",
+            ):
+                cfg = _read_ai_config()
+                if not _ai_is_ready(cfg):
+                    st.warning("请先在左侧「✨ AI 总结 → 接口配置」里填写 API Key")
+                else:
+                    with st.spinner("正在生成总结 …"):
+                        try:
+                            summary = summarize_memory(item, cfg)
+                            _set_summary(Path(item["path"]), summary)
+                        except RuntimeError as exc:
+                            st.error(f"总结失败：{exc}")
+                        else:
+                            load_memories.clear()
+                            st.toast("✨ 总结已生成", icon="✅")
+                            st.rerun()
+        with act_r:
+            if st.button("🗑 删除这条记忆", key=f"del_{item['path']}", width="stretch"):
+                st.session_state["_pending_delete"] = item["path"]
+                st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
     if not query and shown < len(filtered):

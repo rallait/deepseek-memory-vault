@@ -13,6 +13,12 @@ my_memories/*.md
 debug_artifacts/
 launcher.log
 
+# 本地密钥（AI 接口配置，绝不上传）
+.deepshare_ai.json
+
+# 依赖安装完成标记
+.deps_ok
+
 # 本项目的临时启动包装（各人自己写自己的）
 启动记忆库.vbs
 *.lnk

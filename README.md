@@ -12,7 +12,8 @@
 - **本地 Markdown 存储**：每条记忆自动落盘到 `my_memories/` 目录，带 YAML front matter 记录标题、来源、抓取时间。
 - **智能去重**：同一分享链接重复抓取会自动覆盖旧文件，不会堆积副本。
 - **全文搜索**：侧边栏关键词实时过滤，支持按标题和正文匹配。
-- **暗色 / 亮色双主题**：侧边栏一键切换，自动持久化。
+- **AI 一句话总结**：接入任意 OpenAI 兼容接口（默认 DeepSeek），一键为长对话生成 120-220 字摘要，写回文件持久保存。
+- **暗色 / 亮色 / 琥珀三主题**：侧边栏下拉切换，自动持久化。
 - **零后端、零账号**：纯本地 Streamlit 应用，不联网数据库，不收集任何数据。
 
 ## 🚀 快速开始
@@ -40,6 +41,14 @@ streamlit run app.py
 2. 打开 DeepShare，在左侧粘贴链接，点 **「开始抓取」**。
 3. 抓取完成后自动渲染为 Markdown，右侧即可搜索、浏览、收藏。
 
+### 4. 开启 AI 总结（可选）
+
+1. 侧边栏「✨ AI 总结 → 接口配置」填入 **API Key**（DeepSeek 平台申请，`sk-` 开头）。
+2. Base URL 默认 `https://api.deepseek.com`，模型默认 `deepseek-chat`；换成任何 OpenAI 兼容端点（Kimi、Qwen、本地 Ollama 等）也可以。
+3. 点「保存配置」，然后在任意记忆卡片上点 **「✨ AI 总结」**，摘要会写入该 Markdown 的 front matter，下次打开直接显示。
+
+> API Key 只保存在本机 `.deepshare_ai.json`，该文件已被 `.gitignore` 排除，不会随代码上传。
+
 ## 🗂 目录结构
 
 ```
@@ -58,6 +67,7 @@ streamlit run app.py
 |---|---|
 | Web 框架 | Streamlit |
 | 抓取引擎 | Playwright（同步模式，Chromium） |
+| AI 总结 | OpenAI 兼容 `/chat/completions`（默认 DeepSeek，标准库 urllib 调用，零额外依赖） |
 | 存储 | 本地 Markdown + YAML front matter |
 | 内容清洗 | 自研 DOM / 接口双重降级抓取 + THINK 片段识别 |
 
@@ -79,7 +89,7 @@ DeepShare 采用 **阶梯式降级** 设计，任何一层成功即返回，不�
 
 ## 🎨 主题
 
-默认深色主题（`base = "dark"`），侧边栏 toggle 即时切换并写入 `.streamlit/config.toml` 持久化。想改默认亮色，直接编辑 `config.toml` 的 `base` 字段即可。
+侧边栏顶部下拉可切换三种风格：**🌙 赛博 Dark**（默认）、**☀️ 清爽 Light**、**🟠 琥珀 Amber**。选择后即时生效，并写入 `.streamlit/config.toml` 与 `[deepshare] theme_key` 持久化，下次启动自动恢复。
 
 ## 📝 License
 
