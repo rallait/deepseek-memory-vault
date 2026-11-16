@@ -42,6 +42,8 @@ DEBUG_DIR = BASE_DIR / "debug_artifacts"
 
 # AI 总结配置（本地文件，已在 .gitignore 中排除，不会上传）
 AI_CONFIG_PATH = BASE_DIR / ".deepshare_ai.json"
+# 本地偏好（当前主题等），同样不上传
+PREFS_PATH = BASE_DIR / ".deepshare_prefs.json"
 AI_DEFAULTS = {
     "api_key": "",
     "base_url": "https://api.deepseek.com",
@@ -1763,8 +1765,8 @@ def _streamlit_config_path() -> Path:
 
 
 def _read_config_toml() -> dict:
-    """极简 TOML 读取，只关心 [theme] + [client] + [deepshare] 三段。"""
-    cfg = {"theme": {}, "client": {}, "deepshare": {}}
+    """极简 TOML 读取，只关心 [theme] + [client] 两段。"""
+    cfg = {"theme": {}, "client": {}}
     path = _streamlit_config_path()
     if not path.exists():
         return cfg
@@ -1789,7 +1791,7 @@ def _write_config_toml(cfg: dict) -> None:
     path = _streamlit_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
-    for section in ("theme", "client", "deepshare"):
+    for section in ("theme", "client"):
         if section not in cfg or not cfg[section]:
             continue
         lines.append(f"[{section}]")
@@ -1799,15 +1801,40 @@ def _write_config_toml(cfg: dict) -> None:
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
+def _read_prefs() -> dict:
+    try:
+        if PREFS_PATH.exists():
+            data = json.loads(PREFS_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
+
+
+def _write_prefs(**kv: Any) -> None:
+    data = _read_prefs()
+    data.update({k: v for k, v in kv.items() if v is not None})
+    PREFS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _saved_theme_key() -> str:
+    key = str(_read_prefs().get("theme_key", ""))
+    return key if key in STREAMLIT_THEMES else ""
+
+
 def _sync_theme_config(theme_key: str) -> None:
-    """把主题写入 config.toml，让 Streamlit 下一次启动自动加载。"""
+    """主题色写进 config.toml（Streamlit 合法字段），选择记在本地偏好文件里。
+
+    自定义字段不能放进 config.toml，否则 Streamlit 启动时会报 invalid config option。
+    """
     if theme_key not in STREAMLIT_THEMES:
         return
     cfg = _read_config_toml()
     cfg.setdefault("client", {})["toolbarMode"] = "minimal"
-    cfg.setdefault("deepshare", {})["theme_key"] = theme_key
     cfg["theme"].update(STREAMLIT_THEMES[theme_key])
     _write_config_toml(cfg)
+    _write_prefs(theme_key=theme_key)
 
 
 def _theme_css_vars(theme_key: str) -> str:
@@ -2419,10 +2446,10 @@ def main() -> None:
         initial_sidebar_state="expanded",
     )
 
-    # 主题初始化：优先从 config.toml [deepshare] theme_key 读，fallback 到 base 推断
+    # 主题初始化：优先读本地偏好文件，fallback 到 config.toml 的 base 推断
     if "theme_key" not in st.session_state:
         cfg = _read_config_toml()
-        saved = cfg.get("deepshare", {}).get("theme_key", "")
+        saved = _saved_theme_key()
         base = (cfg.get("theme", {}).get("base") or "dark").lower()
         if saved in STREAMLIT_THEMES:
             st.session_state["theme_key"] = saved

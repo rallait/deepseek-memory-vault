@@ -16,6 +16,9 @@ launcher.log
 # 本地密钥（AI 接口配置，绝不上传）
 .deepshare_ai.json
 
+# 本地偏好（主题选择等）
+.deepshare_prefs.json
+
 # 依赖安装完成标记
 .deps_ok
 
