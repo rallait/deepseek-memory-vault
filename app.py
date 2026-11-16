@@ -16,10 +16,12 @@
 
 from __future__ import annotations
 
+import io
 import json
 import re
 import sys
 import time
+import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -1888,6 +1890,29 @@ def render_sidebar() -> ScrapeResult | None:
                     )
                 if result.ok:
                     load_memories.clear()
+                    st.rerun()
+
+        st.markdown("---")
+        st.markdown("##### 📦 批量操作")
+
+        items = load_memories(_dir_signature())
+        if items:
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                for it in items:
+                    zf.writestr(it["name"], it["raw"])
+            zip_bytes = buf.getvalue()
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            st.download_button(
+                f"⬇️ 导出全部为 ZIP（{len(items)} 条）",
+                data=zip_bytes,
+                file_name=f"deepshare_backup_{ts}.zip",
+                mime="application/zip",
+                width="stretch",
+                help="打包 my_memories/ 下所有 .md，便于备份和迁移",
+            )
+        else:
+            st.caption("暂无记忆可导出")
 
         st.markdown("---")
         st.markdown("##### 存储位置")
@@ -1900,6 +1925,17 @@ def render_sidebar() -> ScrapeResult | None:
 
 def render_main(result: ScrapeResult | None) -> None:
     _render_header()
+
+    # —— 删除（两阶段：按钮点击只设标记，rerun 后真正执行）——
+    pending = st.session_state.pop("_pending_delete", None)
+    if pending:
+        try:
+            Path(pending).unlink(missing_ok=True)
+        except OSError:
+            pass
+        load_memories.clear()
+        st.toast("🗑 记忆已删除", icon="✅")
+        st.rerun()
 
     items = load_memories(_dir_signature())
 
@@ -1973,6 +2009,9 @@ def render_main(result: ScrapeResult | None) -> None:
                         "字节数": item["size"],
                     }
                 )
+            if st.button("🗑 删除这条记忆", key=f"del_{item['path']}", use_container_width=True):
+                st.session_state["_pending_delete"] = item["path"]
+                st.rerun()
 
     if not query and shown < len(filtered):
         if st.button(f"加载更多（还有 {len(filtered) - shown} 条）", width="stretch"):
