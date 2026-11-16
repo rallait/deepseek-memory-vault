@@ -28,7 +28,7 @@ if not exist ".deps_ok" (
 )
 
 echo [*] Starting Streamlit...
-python -m streamlit run app.py --server.headless true --browser.gatherUsageStats false
+python -m streamlit run app.py --server.headless true --server.address localhost --browser.gatherUsageStats false
 goto :eof
 
 :err
