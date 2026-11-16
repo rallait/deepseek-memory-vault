@@ -1911,11 +1911,41 @@ div[data-testid="stExpander"] > div:not([data-testid="stStickyFooter"]) > div { 
 div[data-testid="stCode"] { border: 1px solid var(--geek-line) !important; border-radius: 8px; }
 
 /* ========= Selectbox ========= */
-[data-testid="stSelectbox"] [role="combobox"], [data-testid="stMultiSelect"] [role="combobox"],
-[data-testid="stSelectbox"] [role="listbox"], [data-testid="stMultiSelect"] [role="listbox"] {
+/* Streamlit selectbox 有三层：容器 div / combobox / 下拉 listbox，统一覆盖 */
+[data-testid="stSelectbox"],
+[data-testid="stSelectbox"] > div,
+[data-testid="stSelectbox"] [role="combobox"],
+[data-testid="stSelectbox"] [role="listbox"],
+[data-testid="stMultiSelect"],
+[data-testid="stMultiSelect"] > div,
+[data-testid="stMultiSelect"] [role="combobox"],
+[data-testid="stMultiSelect"] [role="listbox"] {
   background: var(--geek-input-bg) !important;
   color: var(--geek-text) !important;
   border: 1px solid var(--geek-line) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+[data-testid="stSelectbox"] [role="combobox"]:hover,
+[data-testid="stMultiSelect"] [role="combobox"]:hover {
+  border-color: var(--geek-cyan-soft) !important;
+}
+[data-testid="stSelectbox"] [role="combobox"]:focus-within,
+[data-testid="stMultiSelect"] [role="combobox"]:focus-within {
+  border-color: var(--geek-cyan) !important;
+  box-shadow: 0 0 0 2px var(--geek-cyan-soft), 0 0 10px var(--geek-cyan-glow) !important;
+}
+/* 下拉选项 */
+[data-testid="stSelectbox"] li[role="option"],
+[data-testid="stMultiSelect"] li[role="option"] {
+  background: var(--geek-input-bg) !important;
+  color: var(--geek-text) !important;
+  border: none !important;
+}
+[data-testid="stSelectbox"] li[aria-selected="true"],
+[data-testid="stMultiSelect"] li[aria-selected="true"] {
+  background: var(--geek-cyan-soft) !important;
+  color: var(--geek-text-strong) !important;
 }
 
 /* ========= Tabs ========= */
