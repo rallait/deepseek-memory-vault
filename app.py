@@ -1890,6 +1890,31 @@ button[aria-selected="true"] { color: var(--geek-cyan) !important; border-bottom
 /* ========= Caption / Helper ========= */
 .stCaption, .stHelper, small, em { color: var(--geek-dim) !important; }
 
+/* ========= Callout / Alert（info / success / warning / error）========= */
+/* Streamlit 四种 callout 有硬编码 inline 颜色，主题切换不跟随。手动覆盖。 */
+[data-testid="stAlertContainer"],
+[data-testid="stInfoContainer"],
+[data-testid="stSuccessContainer"],
+[data-testid="stWarningContainer"],
+[data-testid="stErrorContainer"],
+div[role="alert"], div[role="status"] {
+  color: var(--geek-text) !important;
+  background: var(--geek-glass) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 0 0 1px var(--geek-glass-border) !important;
+}
+/* 四种类型各自的左侧色条 */
+[data-testid="stInfoContainer"] { border-left: 3px solid var(--geek-cyan) !important; }
+[data-testid="stSuccessContainer"] { border-left: 3px solid var(--geek-green) !important; }
+[data-testid="stWarningContainer"] { border-left: 3px solid #f59e0b !important; }
+[data-testid="stErrorContainer"] { border-left: 3px solid var(--geek-pink) !important; }
+/* callout 内部文字统一 */
+[data-testid="stAlertContainer"] *,
+[data-testid="stInfoContainer"] *,
+[data-testid="stSuccessContainer"] *,
+[data-testid="stWarningContainer"] *,
+[data-testid="stErrorContainer"] * { color: var(--geek-text) !important; }
+
 /* ========= 卡片容器 / geek-card 旧类兼容 ========= */
 .geek-card h4 { margin: 0 0 .3rem 0; color: var(--geek-text-strong) !important; }
 .geek-meta { color: var(--geek-dim) !important; font-size: .78rem; font-family: ui-monospace, Consolas, monospace; }
