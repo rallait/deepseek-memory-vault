@@ -1663,9 +1663,19 @@ CYBER_CSS = """
     radial-gradient(1200px 600px at 85% -10%, var(--geek-app-radial-a), transparent 60%),
     radial-gradient(900px 500px at 0% 100%, var(--geek-app-radial-b), transparent 60%),
     var(--geek-bg);
-  color: var(--geek-text);
+  color: var(--geek-text) !important;
 }
-* { transition: color var(--geek-transition), background-color var(--geek-transition), border-color var(--geek-transition), box-shadow var(--geek-transition), opacity var(--geek-transition); }
+
+/* 核心：主题切换时 Streamlit 会注入 inline style="color:..." 覆盖，
+ * 用 !important + 容器级选择器强制所有文本跟随主题变量。
+ * 下方 accent 色（cyan/dim/green/pink）规则更具体，能正常覆盖这里。 */
+[data-testid="stMarkdownContainer"],
+[data-testid="stMarkdownContainer"] *,
+[data-testid="stSidebar"] *,
+.stMetric, .stMetric *,
+.stExpander, .stExpander * {
+  color: var(--geek-text) !important;
+}
 
 /* ========= 滚动条 ========= */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -1683,6 +1693,7 @@ CYBER_CSS = """
   background: var(--geek-sidebar-grad);
   border-right: 1px solid var(--geek-line);
 }
+[data-testid="stSidebar"] * { color: var(--geek-text) !important; }
 [data-testid="stSidebar"] section[data-testid="stSidebarNavContainer"] {
   background: transparent !important;
 }
@@ -1693,7 +1704,7 @@ CYBER_CSS = """
   font-size: 2.2rem;
   font-weight: 800;
   letter-spacing: 3px;
-  color: var(--geek-text-strong);
+  color: var(--geek-text-strong) !important;
   text-shadow: 0 0 22px var(--geek-title-shadow), 0 0 2px var(--geek-cyan-glow);
   margin-bottom: .2rem;
   position: relative;
@@ -1704,13 +1715,13 @@ CYBER_CSS = """
   position: absolute; left: 0; top: 0; width: 100%; height: 100%;
   pointer-events: none;
 }
-.geek-title::before { color: var(--geek-pink); transform: translate(-2px, 0); opacity: .45; mix-blend-mode: screen; animation: glitch-top 3s infinite steps(2, end); }
-.geek-title::after  { color: var(--geek-cyan); transform: translate(2px, 0); opacity: .45; mix-blend-mode: screen; animation: glitch-bot 2.6s infinite steps(2, end); }
-.geek-title span { color: var(--geek-cyan); }
+.geek-title::before { color: var(--geek-pink) !important; transform: translate(-2px, 0); opacity: .45; mix-blend-mode: screen; animation: glitch-top 3s infinite steps(2, end); }
+.geek-title::after  { color: var(--geek-cyan) !important; transform: translate(2px, 0); opacity: .45; mix-blend-mode: screen; animation: glitch-bot 2.6s infinite steps(2, end); }
+.geek-title span { color: var(--geek-cyan) !important; }
 @keyframes glitch-top { 0%,90%,100%{clip-path:inset(0 0 85% 0)} 92%{clip-path:inset(20% 0 55% 0)} 94%{clip-path:inset(60% 0 10% 0)} }
 @keyframes glitch-bot { 0%,88%,100%{clip-path:inset(82% 0 0 0)} 90%{clip-path:inset(40% 0 30% 0)} 93%{clip-path:inset(5% 0 70% 0)} }
 .geek-sub {
-  color: var(--geek-dim);
+  color: var(--geek-dim) !important;
   font-family: ui-monospace, Consolas, monospace;
   font-size: .78rem;
   letter-spacing: 2px;
@@ -1730,7 +1741,7 @@ CYBER_CSS = """
 @keyframes hr-sweep { 0%{transform:translateX(-100%)} 100%{transform:translateX(450%)} }
 
 /* ========= 排版 ========= */
-h1, h2, h3, h4 { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; letter-spacing: .3px; color: var(--geek-text-strong); }
+h1, h2, h3, h4 { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; letter-spacing: .3px; color: var(--geek-text-strong) !important; }
 p, li, div { font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; }
 code, pre, kbd { font-family: ui-monospace, "Cascadia Code", Consolas, monospace !important; }
 [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] li,
@@ -1847,14 +1858,14 @@ div[data-testid="stExpander"] > div:not([data-testid="stStickyFooter"]) > div { 
   display: inline-block; padding: .14rem .55rem; margin-right: .4rem; margin-bottom: .15rem;
   border: 1px solid var(--geek-cyan-soft);
   border-radius: 999px;
-  color: var(--geek-cyan);
+  color: var(--geek-cyan) !important;
   font-size: .72rem;
   font-family: ui-monospace, Consolas, monospace;
   letter-spacing: .5px;
   background: var(--geek-panel-soft);
 }
-.geek-badge.pink { border-color: rgba(225,29,125,.4); color: var(--geek-pink); }
-.geek-badge.green { border-color: rgba(16,185,129,.35); color: var(--geek-green); }
+.geek-badge.pink { border-color: rgba(225,29,125,.4); color: var(--geek-pink) !important; }
+.geek-badge.green { border-color: rgba(16,185,129,.35); color: var(--geek-green) !important; }
 
 /* ========= Checkbox / Radio / Toggle ========= */
 .stCheckbox label, .stRadio label, .stMarkdown label { color: var(--geek-text) !important; }
@@ -1880,8 +1891,8 @@ button[aria-selected="true"] { color: var(--geek-cyan) !important; border-bottom
 .stCaption, .stHelper, small, em { color: var(--geek-dim) !important; }
 
 /* ========= 卡片容器 / geek-card 旧类兼容 ========= */
-.geek-card h4 { margin: 0 0 .3rem 0; color: var(--geek-text-strong); }
-.geek-meta { color: var(--geek-dim); font-size: .78rem; font-family: ui-monospace, Consolas, monospace; }
+.geek-card h4 { margin: 0 0 .3rem 0; color: var(--geek-text-strong) !important; }
+.geek-meta { color: var(--geek-dim) !important; font-size: .78rem; font-family: ui-monospace, Consolas, monospace; }
 </style>
 """
 
