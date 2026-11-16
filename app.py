@@ -19,8 +19,10 @@ from __future__ import annotations
 import html
 import io
 import json
+import queue
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -49,9 +51,9 @@ AI_DEFAULTS = {
     "base_url": "https://api.deepseek.com",
     "model": "deepseek-chat",
 }
-# 单次送入模型的最大字符数（头 + 尾拼接，避免超长对话爆上下文）
-AI_INPUT_HEAD = 14000
-AI_INPUT_TAIL = 6000
+# 单次送入模型的最大字符数（头 + 尾拼接，避免超长对话爆上下文/拖慢响应）
+AI_INPUT_HEAD = 12000
+AI_INPUT_TAIL = 4000
 
 LogFn = Callable[[str], None]
 
@@ -1569,7 +1571,7 @@ def _clip_for_ai(body: str) -> str:
     )
 
 
-def _ai_chat(cfg: dict, messages: list[dict], timeout: int = 120) -> str:
+def _ai_chat(cfg: dict, messages: list[dict], timeout: int = 90, max_tokens: int = 800) -> str:
     """调用 OpenAI 兼容的 /chat/completions，失败抛 RuntimeError。"""
     url = cfg["base_url"].rstrip("/")
     if not url.endswith("/chat/completions"):
@@ -1579,7 +1581,7 @@ def _ai_chat(cfg: dict, messages: list[dict], timeout: int = 120) -> str:
             "model": cfg["model"],
             "messages": messages,
             "temperature": 0.3,
-            "max_tokens": 800,
+            "max_tokens": max_tokens,
             "stream": False,
         },
         ensure_ascii=False,
@@ -1612,6 +1614,65 @@ def _ai_chat(cfg: dict, messages: list[dict], timeout: int = 120) -> str:
         return (data["choices"][0]["message"]["content"] or "").strip()
     except (KeyError, IndexError, TypeError):
         raise RuntimeError(f"接口返回格式异常：{json.dumps(data, ensure_ascii=False)[:300]}")
+
+
+def _ai_chat_stream(cfg: dict, messages: list[dict], timeout: int = 120, max_tokens: int = 2000):
+    """流式调用，逐块产出正文；用于让界面边生成边显示，避免"卡死"观感。"""
+    url = cfg["base_url"].rstrip("/")
+    if not url.endswith("/chat/completions"):
+        url += "/chat/completions"
+    payload = json.dumps(
+        {
+            "model": cfg["model"],
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": max_tokens,
+            "stream": True,
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            "Authorization": f"Bearer {cfg['api_key']}",
+        },
+        method="POST",
+    )
+    try:
+        resp = urllib.request.urlopen(req, timeout=timeout)
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", "ignore")[:300]
+        except Exception:
+            pass
+        raise RuntimeError(f"接口返回 {exc.code}：{detail or exc.reason}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"网络无法连接：{exc.reason}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"请求失败：{type(exc).__name__}: {exc}") from exc
+
+    with resp:
+        for raw in resp:
+            line = raw.decode("utf-8", "ignore").strip()
+            if not line.startswith("data:"):
+                continue
+            chunk = line[5:].strip()
+            if chunk == "[DONE]":
+                break
+            try:
+                obj = json.loads(chunk)
+            except Exception:
+                continue
+            choices = obj.get("choices") or []
+            if not choices:
+                continue
+            piece = (choices[0].get("delta") or {}).get("content") or ""
+            if piece:
+                yield piece
 
 
 def summarize_memory(item: dict, cfg: dict) -> str:
@@ -1668,8 +1729,7 @@ def _write_prompt(item: dict, text: str) -> None:
     _prompt_path(item).write_text(text.strip() + "\n", encoding="utf-8")
 
 
-def build_handoff_prompt(item: dict, cfg: dict) -> str:
-    """让模型读完对话后，输出一段给新窗口用的接手提示词。"""
+def _handoff_messages(item: dict) -> list[dict]:
     title = item.get("title", "")
     body = _clip_for_ai(item.get("body", ""))
     instruction = (
@@ -1685,16 +1745,26 @@ def build_handoff_prompt(item: dict, cfg: dict) -> str:
         "   ## 接下来要做的 —— 按顺序列出剩余任务；\n"
         "3. 保留可复用的具体信息（技术栈、文件名、命令、报错原文），不要泛泛而谈；\n"
         "4. 全文控制在 600 字以内，信息密度优先；\n"
-        "5. 如果对话里信息不足以填某一节，就写「（原文未涉及）」，不要编造。"
+        "5. 如果对话里信息不足以填某一节，就写「（原文未涉及）」，不要编造；\n"
+        "6. 必须写完整最后一节，不要在句子中间结束。"
     )
-    messages = [
+    return [
         {"role": "system", "content": instruction},
         {"role": "user", "content": f"对话标题：{title}\n\n对话正文：\n{body}"},
     ]
-    text = _ai_chat(cfg, messages, timeout=180).strip()
+
+
+def _clean_prompt(text: str) -> str:
+    text = (text or "").strip()
     if text.startswith("```"):
         text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
-        text = re.sub(r"\n?```$", "", text).strip()
+        text = re.sub(r"\n?```$", "", text)
+    return text.strip()
+
+
+def build_handoff_prompt(item: dict, cfg: dict) -> str:
+    """非流式版本（命令行/测试用），界面走流式以便边生成边显示。"""
+    text = _clean_prompt(_ai_chat(cfg, _handoff_messages(item), timeout=120, max_tokens=2000))
     if not text:
         raise RuntimeError("接口返回了空内容")
     return text
@@ -2369,6 +2439,61 @@ def render_sidebar() -> ScrapeResult | None:
     return result
 
 
+def _stream_generate_prompt(item: dict, cfg: dict) -> str:
+    """流式生成续聊 Prompt：边收边显示，并实时显示已等待/已生成字数。
+
+    用一个后台线程跑网络请求、主线程轮询队列，这样即使首字节还没回来，
+    界面上的计时器也在跳，不会看起来像卡死。
+    """
+    q: "queue.Queue[tuple[str, str]]" = queue.Queue()
+
+    def worker() -> None:
+        try:
+            for piece in _ai_chat_stream(cfg, _handoff_messages(item)):
+                q.put(("chunk", piece))
+            q.put(("done", ""))
+        except RuntimeError as exc:
+            q.put(("error", str(exc)))
+        except Exception as exc:  # 兜住线程内的一切异常，否则界面会一直等
+            q.put(("error", f"{type(exc).__name__}: {exc}"))
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    box = st.empty()
+    status = st.status("正在通读对话 …", expanded=False)
+    acc: list[str] = []
+    start = time.time()
+    while True:
+        try:
+            kind, value = q.get(timeout=1)
+        except queue.Empty:
+            elapsed = int(time.time() - start)
+            status.update(label=f"等待接口响应 … 已 {elapsed} 秒")
+            continue
+        if kind == "chunk":
+            acc.append(value)
+            text = "".join(acc)
+            box.markdown(text[-2000:] + "▍")
+            status.update(label=f"生成中 … 已 {int(time.time() - start)} 秒 / {len(text)} 字")
+        elif kind == "error":
+            status.update(label="生成失败", state="error")
+            box.empty()
+            st.error(f"生成失败：{value}")
+            return ""
+        else:
+            break
+
+    status.update(
+        label=f"完成，用时 {int(time.time() - start)} 秒", state="complete", expanded=False
+    )
+    box.markdown("已写入卡片，可在下方查看与复制。")
+    text = _clean_prompt("".join(acc))
+    if not text:
+        st.error("接口返回了空内容，请重试")
+        return ""
+    return text
+
+
 def render_main(result: ScrapeResult | None) -> None:
     _render_header()
 
@@ -2498,16 +2623,12 @@ def render_main(result: ScrapeResult | None) -> None:
                 if not _ai_is_ready(cfg):
                     st.warning("请先在左侧「✨ AI 总结 → 接口配置」里填写 API Key")
                 else:
-                    with st.spinner("正在通读并生成 Prompt …"):
-                        try:
-                            prompt_text = build_handoff_prompt(item, cfg)
-                            _write_prompt(item, prompt_text)
-                        except RuntimeError as exc:
-                            st.error(f"生成失败：{exc}")
-                        else:
-                            st.session_state["_prompt_open"] = item["name"]
-                            st.toast("📋 Prompt 已生成，可直接复制", icon="✅")
-                            st.rerun()
+                    prompt_text = _stream_generate_prompt(item, cfg)
+                    if prompt_text:
+                        _write_prompt(item, prompt_text)
+                        st.session_state["_prompt_open"] = item["name"]
+                        load_memories.clear()
+                        st.rerun()
         with act_c:
             if st.button("🗑 删除这条记忆", key=f"del_{item['path']}", width="stretch"):
                 st.session_state["_pending_delete"] = item["path"]
