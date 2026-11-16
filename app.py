@@ -1646,6 +1646,61 @@ def _set_summary(path: Path, summary: str) -> None:
 
 
 # ----------------------------------------------------------------------------
+# 续聊 Prompt：读完整段对话，产出一段可粘贴到新对话的交接提示词
+# ----------------------------------------------------------------------------
+PROMPT_DIR = MEMORY_DIR / ".prompts"
+
+
+def _prompt_path(item: dict) -> Path:
+    return PROMPT_DIR / (Path(item["name"]).stem + ".txt")
+
+
+def _read_prompt(item: dict) -> str:
+    path = _prompt_path(item)
+    try:
+        return path.read_text(encoding="utf-8").strip() if path.exists() else ""
+    except Exception:
+        return ""
+
+
+def _write_prompt(item: dict, text: str) -> None:
+    PROMPT_DIR.mkdir(parents=True, exist_ok=True)
+    _prompt_path(item).write_text(text.strip() + "\n", encoding="utf-8")
+
+
+def build_handoff_prompt(item: dict, cfg: dict) -> str:
+    """让模型读完对话后，输出一段给新窗口用的接手提示词。"""
+    title = item.get("title", "")
+    body = _clip_for_ai(item.get("body", ""))
+    instruction = (
+        "你是一个上下文交接专家。下面是一段已经结束的对话，请把它压缩成一段"
+        "「可以直接粘贴到全新对话窗口」的接手提示词，让新窗口的 AI 无需阅读原文就能无缝继续。\n"
+        "硬性要求：\n"
+        "1. 只输出提示词正文本身，不要任何解释、前言、结语，不要用 ``` 包裹；\n"
+        "2. 用中文，分小节写，标题用「## 」。必须包含这些小节：\n"
+        "   ## 背景与目标 —— 这件事是什么、最终要达成什么；\n"
+        "   ## 已完成 —— 已经做完的事、产出的文件/代码/配置（保留具体路径、命令、参数）；\n"
+        "   ## 当前状态 —— 现在停在哪一步、已确认的结论和关键数据；\n"
+        "   ## 关键约束 —— 用户的偏好、踩过的坑、明确不要做的事；\n"
+        "   ## 接下来要做的 —— 按顺序列出剩余任务；\n"
+        "3. 保留可复用的具体信息（技术栈、文件名、命令、报错原文），不要泛泛而谈；\n"
+        "4. 全文控制在 600 字以内，信息密度优先；\n"
+        "5. 如果对话里信息不足以填某一节，就写「（原文未涉及）」，不要编造。"
+    )
+    messages = [
+        {"role": "system", "content": instruction},
+        {"role": "user", "content": f"对话标题：{title}\n\n对话正文：\n{body}"},
+    ]
+    text = _ai_chat(cfg, messages, timeout=180).strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+        text = re.sub(r"\n?```$", "", text).strip()
+    if not text:
+        raise RuntimeError("接口返回了空内容")
+    return text
+
+
+# ----------------------------------------------------------------------------
 # UI
 # ----------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
@@ -2405,8 +2460,13 @@ def render_main(result: ScrapeResult | None) -> None:
                     "字节数": item["size"],
                 }
             )
-        act_l, act_r = st.columns([1, 1])
-        with act_l:
+        saved_prompt = _read_prompt(item)
+        if saved_prompt:
+            opened = st.session_state.get("_prompt_open") == item["name"]
+            with st.expander("📋 续聊 Prompt（右上角一键复制）", expanded=opened):
+                st.code(saved_prompt, language="text")
+        act_a, act_b, act_c = st.columns([1, 1, 1])
+        with act_a:
             has_summary = bool(item.get("summary"))
             if st.button(
                 "🔄 重新总结" if has_summary else "✨ AI 总结",
@@ -2427,7 +2487,28 @@ def render_main(result: ScrapeResult | None) -> None:
                             load_memories.clear()
                             st.toast("✨ 总结已生成", icon="✅")
                             st.rerun()
-        with act_r:
+        with act_b:
+            if st.button(
+                "🔄 重做 Prompt" if saved_prompt else "📋 续聊 Prompt",
+                key=f"prompt_{item['path']}",
+                width="stretch",
+                help="读完这段对话，生成一段能粘到新对话窗口继续干的提示词",
+            ):
+                cfg = _read_ai_config()
+                if not _ai_is_ready(cfg):
+                    st.warning("请先在左侧「✨ AI 总结 → 接口配置」里填写 API Key")
+                else:
+                    with st.spinner("正在通读并生成 Prompt …"):
+                        try:
+                            prompt_text = build_handoff_prompt(item, cfg)
+                            _write_prompt(item, prompt_text)
+                        except RuntimeError as exc:
+                            st.error(f"生成失败：{exc}")
+                        else:
+                            st.session_state["_prompt_open"] = item["name"]
+                            st.toast("📋 Prompt 已生成，可直接复制", icon="✅")
+                            st.rerun()
+        with act_c:
             if st.button("🗑 删除这条记忆", key=f"del_{item['path']}", width="stretch"):
                 st.session_state["_pending_delete"] = item["path"]
                 st.rerun()

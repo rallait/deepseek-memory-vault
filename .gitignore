@@ -9,7 +9,7 @@ venv/
 .streamlit/secrets.toml
 
 # 运行时产物
-my_memories/*.md
+my_memories/
 debug_artifacts/
 launcher.log
 
